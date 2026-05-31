@@ -1,0 +1,47 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # 1. Ingest TEST (Extract → Bronze)
+# MAGIC Lee `fraudTest.csv` desde **raw** (Managed Identity) → tabla Delta externa en bronze.
+
+# COMMAND ----------
+
+dbutils.widgets.text("catalogo", "catalog_dev", "Catálogo")
+dbutils.widgets.text("container", "raw", "Contenedor raw")
+dbutils.widgets.text("esquema", "bronze", "Schema destino")
+dbutils.widgets.text("storageName", "stfrauddetection01", "Storage Account")
+
+catalogo    = dbutils.widgets.get("catalogo")
+container   = dbutils.widgets.get("container")
+esquema     = dbutils.widgets.get("esquema")
+storageName = dbutils.widgets.get("storageName")
+
+raw_path    = f"abfss://{container}@{storageName}.dfs.core.windows.net/fraudTest.csv"
+bronze_path = f"abfss://bronze@{storageName}.dfs.core.windows.net/transactions_test"
+tabla       = f"{catalogo}.{esquema}.transactions_test"
+
+# COMMAND ----------
+
+from pyspark.sql.functions import current_timestamp, lit
+
+df = (spark.read
+      .option("header", True)
+      .option("inferSchema", True)
+      .csv(raw_path))
+
+print(f"Filas leídas de raw: {df.count()}")
+
+# COMMAND ----------
+
+df_bronze = (df
+             .withColumn("ingestion_date", current_timestamp())
+             .withColumn("source_file", lit("fraudTest.csv")))
+
+(df_bronze.write
+ .format("delta")
+ .mode("overwrite")
+ .option("path", bronze_path)
+ .option("overwriteSchema", "true")
+ .saveAsTable(tabla))
+
+print(f"Tabla bronze creada: {tabla}")
+display(spark.table(tabla).limit(5))
