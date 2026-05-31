@@ -1,25 +1,30 @@
-# --- Unity Catalog Metastore (nivel de cuenta) ---
+# --- Metastore (OPCIONAL) ---
+# En Azure normalmente se auto-crea y asigna un metastore por región al crear el 1er workspace.
+# Solo crear/assignar si create_metastore=true (requiere databricks_account_id).
 resource "databricks_metastore" "this" {
+  count         = var.create_metastore ? 1 : 0
   provider      = databricks.account
   name          = "metastore-${var.prefix}-${var.location}"
   region        = var.location
   force_destroy = true
 }
 
-# Asignar el metastore a cada workspace.
 resource "databricks_metastore_assignment" "dev" {
+  count        = var.create_metastore ? 1 : 0
   provider     = databricks.account
-  metastore_id = databricks_metastore.this.id
+  metastore_id = databricks_metastore.this[0].id
   workspace_id = azurerm_databricks_workspace.dev.workspace_id
 }
 
 resource "databricks_metastore_assignment" "prod" {
+  count        = var.create_metastore ? 1 : 0
   provider     = databricks.account
-  metastore_id = databricks_metastore.this.id
+  metastore_id = databricks_metastore.this[0].id
   workspace_id = azurerm_databricks_workspace.prod.workspace_id
 }
 
 # --- Storage Credential (Managed Identity del Access Connector) ---
+# Nivel de workspace: no requiere account_id. Requiere que el workspace tenga metastore asignado.
 resource "databricks_storage_credential" "mi" {
   provider = databricks.dev
   name     = "credential"
@@ -29,7 +34,7 @@ resource "databricks_storage_credential" "mi" {
   }
 
   comment    = "Managed Identity para acceder a ADLS (capa raw + medallion)."
-  depends_on = [databricks_metastore_assignment.dev, azurerm_role_assignment.ac_blob_contributor]
+  depends_on = [azurerm_role_assignment.ac_blob_contributor]
 }
 
 # --- External Locations (una por contenedor) ---
@@ -63,5 +68,5 @@ resource "databricks_catalog" "prod" {
   comment      = "Catálogo medallion del entorno PROD."
   properties   = { purpose = "fraud-detection-prod" }
 
-  depends_on = [databricks_external_location.loc, databricks_metastore_assignment.prod]
+  depends_on = [databricks_external_location.loc]
 }

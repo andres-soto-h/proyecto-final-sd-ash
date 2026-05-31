@@ -21,8 +21,21 @@ variable "tenant_id" {
 }
 
 variable "databricks_account_id" {
-  description = "Databricks Account ID (consola de cuenta de Databricks)."
+  description = "Databricks Account ID. Solo necesario si create_metastore=true."
   type        = string
+  default     = ""
+}
+
+variable "create_metastore" {
+  description = "Crear y asignar el metastore de UC. En Azure normalmente se auto-crea con el 1er workspace; dejar en false y subirlo a true solo si no existe."
+  type        = bool
+  default     = false
+}
+
+variable "existing_metastore_id" {
+  description = "ID de un metastore ya existente a asignar (opcional). Si vacío y create_metastore=false, se asume que el workspace ya tiene metastore asignado."
+  type        = string
+  default     = ""
 }
 
 variable "storage_account_name" {
