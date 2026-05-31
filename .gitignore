@@ -1,3 +1,22 @@
+# --- Datos crudos (NO se commitean; van al contenedor raw del ADLS) ---
+datasets/raw/
+*.parquet
+fraudTrain.csv
+fraudTest.csv
+
+# --- Python / Streamlit ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+.streamlit/secrets.toml
+*.pkl
+mlruns/
+
+# --- Secretos varios ---
+.env
+*.local
+
 # Local .terraform directories
 .terraform/
 
