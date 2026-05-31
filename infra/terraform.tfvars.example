@@ -1,0 +1,16 @@
+# Copia este archivo a terraform.tfvars y completa con tus valores reales.
+# terraform.tfvars está en .gitignore (no se commitea).
+
+subscription_id       = "00000000-0000-0000-0000-000000000000"
+tenant_id             = "00000000-0000-0000-0000-000000000000"
+databricks_account_id = "00000000-0000-0000-0000-000000000000"
+
+prefix               = "fraud"
+location             = "eastus2"
+storage_account_name = "stfrauddetection01" # debe ser único global, minúsculas/números, 3-24
+
+catalog_dev  = "catalog_dev"
+catalog_prod = "catalog_prod"
+
+# Ruta local a los CSV de Kaggle (descargados con el script de datasets/).
+datasets_local_path = "../datasets/raw"
