@@ -1,0 +1,150 @@
+name: Deploy Databricks dev -> prod
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "proceso/**"
+      - "prepAmb/**"
+      - ".github/workflows/deploy-databricks.yml"
+  workflow_dispatch:
+
+env:
+  DEST_BASE: "/fraud_detection/proceso"
+  CATALOGO: "catalog_prod"
+  STORAGE_NAME: "stfrauddetection01"
+  WORKFLOW_NAME: "WF_PROD_FRAUD_DETECTION"
+  CLUSTER_NAME: "cluster_fraud"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jq & curl
+        run: sudo apt-get update && sudo apt-get install -y jq curl
+
+      # 1) Exportar notebooks del workspace DEV (formato SOURCE).
+      - name: Export notebooks from DEV
+        run: |
+          ORIGIN_HOST=${{ secrets.DATABRICKS_ORIGIN_HOST }}
+          ORIGIN_TOKEN=${{ secrets.DATABRICKS_ORIGIN_TOKEN }}
+          NOTEBOOK_BASE="${{ secrets.DATABRICKS_ORIGIN_PATH }}"
+          NOTEBOOKS=("0_preparacion_ambiente" "1_ingest_train" "1_ingest_test" \
+                     "2_transform" "3_load" "4_train_model" "5_grants")
+          mkdir -p notebooks_to_deploy
+          for nb in "${NOTEBOOKS[@]}"; do
+            echo "Exportando $nb ..."
+            curl -s -X GET \
+              -H "Authorization: Bearer $ORIGIN_TOKEN" \
+              "$ORIGIN_HOST/api/2.0/workspace/export?path=$NOTEBOOK_BASE/$nb&format=SOURCE&direct_download=true" \
+              --output "notebooks_to_deploy/$nb.py"
+          done
+
+      # 2) Importar notebooks al workspace PROD.
+      - name: Import notebooks to PROD
+        run: |
+          DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+          DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+          curl -s -X POST -H "Authorization: Bearer $DEST_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"path\":\"$DEST_BASE\"}" "$DEST_HOST/api/2.0/workspace/mkdirs"
+          for file in notebooks_to_deploy/*.py; do
+            name=$(basename "$file" .py)
+            echo "Importando $name ..."
+            curl -s -X POST -H "Authorization: Bearer $DEST_TOKEN" \
+              -F "path=$DEST_BASE/$name" -F "format=SOURCE" -F "language=PYTHON" \
+              -F "overwrite=true" -F "content=@$file" \
+              "$DEST_HOST/api/2.0/workspace/import"
+          done
+
+      # 3) Obtener cluster existente en PROD.
+      - name: Get cluster ID
+        run: |
+          DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+          DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+          clusters=$(curl -s -H "Authorization: Bearer $DEST_TOKEN" "$DEST_HOST/api/2.0/clusters/list")
+          cid=$(echo "$clusters" | jq -r --arg n "$CLUSTER_NAME" '.clusters[]? | select(.cluster_name==$n) | .cluster_id')
+          if [ -z "$cid" ] || [ "$cid" = "null" ]; then
+            echo "::error::No se encontró el cluster $CLUSTER_NAME en prod"; exit 1
+          fi
+          echo "CLUSTER_ID=$cid" >> $GITHUB_ENV
+
+      # 4) Borrar Job previo si existe.
+      - name: Delete existing job
+        run: |
+          DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+          DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+          jobs=$(curl -s -H "Authorization: Bearer $DEST_TOKEN" "$DEST_HOST/api/2.1/jobs/list")
+          jid=$(echo "$jobs" | jq -r --arg n "$WORKFLOW_NAME" '.jobs[]? | select(.settings.name==$n) | .job_id')
+          if [ -n "$jid" ] && [ "$jid" != "null" ]; then
+            curl -s -X POST -H "Authorization: Bearer $DEST_TOKEN" -H "Content-Type: application/json" \
+              -d "{\"job_id\": $jid}" "$DEST_HOST/api/2.1/jobs/delete"
+            echo "Job previo $jid eliminado."
+          fi
+
+      # 5) Crear Job multi-task: prepamb -> ingest -> transform -> load -> train -> grants.
+      - name: Create job
+        run: |
+          DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+          DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+          PARAMS="{\"catalogo\":\"$CATALOGO\",\"container\":\"raw\",\"esquema\":\"bronze\",\"storageName\":\"$STORAGE_NAME\"}"
+          cat > job.json <<EOF
+          {
+            "name": "$WORKFLOW_NAME",
+            "format": "MULTI_TASK",
+            "tasks": [
+              {"task_key":"prepamb","notebook_task":{"notebook_path":"$DEST_BASE/0_preparacion_ambiente","source":"WORKSPACE","base_parameters":$PARAMS},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":3600,"max_retries":1},
+              {"task_key":"ingest_train","depends_on":[{"task_key":"prepamb"}],"notebook_task":{"notebook_path":"$DEST_BASE/1_ingest_train","source":"WORKSPACE","base_parameters":$PARAMS},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":3600,"max_retries":1},
+              {"task_key":"ingest_test","depends_on":[{"task_key":"prepamb"}],"notebook_task":{"notebook_path":"$DEST_BASE/1_ingest_test","source":"WORKSPACE","base_parameters":$PARAMS},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":3600,"max_retries":1},
+              {"task_key":"transform","depends_on":[{"task_key":"ingest_train"},{"task_key":"ingest_test"}],"notebook_task":{"notebook_path":"$DEST_BASE/2_transform","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO","esquema_source":"bronze","esquema_sink":"silver","storageName":"$STORAGE_NAME"}},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":3600,"max_retries":1},
+              {"task_key":"load","depends_on":[{"task_key":"transform"}],"notebook_task":{"notebook_path":"$DEST_BASE/3_load","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO","esquema_source":"silver","esquema_sink":"golden","storageName":"$STORAGE_NAME"}},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":3600,"max_retries":1},
+              {"task_key":"train","depends_on":[{"task_key":"load"}],"notebook_task":{"notebook_path":"$DEST_BASE/4_train_model","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO","esquema":"golden","model_schema":"ml"}},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":7200,"max_retries":1},
+              {"task_key":"grants","depends_on":[{"task_key":"train"}],"notebook_task":{"notebook_path":"$DEST_BASE/5_grants","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO"}},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":1800,"max_retries":1}
+            ],
+            "max_concurrent_runs": 1,
+            "tags": {"environment":"production","created_by":"github_actions","project":"fraud_detection"}
+          }
+          EOF
+          resp=$(curl -s -X POST -H "Authorization: Bearer $DEST_TOKEN" -H "Content-Type: application/json" \
+            -d @job.json "$DEST_HOST/api/2.1/jobs/create")
+          jid=$(echo "$resp" | jq -r '.job_id')
+          [ "$jid" = "null" ] && { echo "::error::Fallo creando job: $resp"; exit 1; }
+          echo "JOB_ID=$jid" >> $GITHUB_ENV
+          echo "Job creado: $jid"
+
+      # 6) Ejecutar el Job.
+      - name: Run job
+        run: |
+          DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+          DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+          resp=$(curl -s -X POST -H "Authorization: Bearer $DEST_TOKEN" -H "Content-Type: application/json" \
+            -d "{\"job_id\": ${{ env.JOB_ID }}}" "$DEST_HOST/api/2.1/jobs/run-now")
+          rid=$(echo "$resp" | jq -r '.run_id')
+          [ "$rid" = "null" ] && { echo "::error::Fallo ejecutando job: $resp"; exit 1; }
+          echo "RUN_ID=$rid" >> $GITHUB_ENV
+          echo "Run iniciado: $rid"
+
+      # 7) Monitorear hasta finalizar.
+      - name: Monitor run
+        run: |
+          DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+          DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+          for i in $(seq 1 60); do
+            st=$(curl -s -H "Authorization: Bearer $DEST_TOKEN" "$DEST_HOST/api/2.1/jobs/runs/get?run_id=${{ env.RUN_ID }}")
+            life=$(echo "$st" | jq -r '.state.life_cycle_state')
+            res=$(echo "$st" | jq -r '.state.result_state // "RUNNING"')
+            echo "[$i] $life ($res)"
+            if [ "$life" = "TERMINATED" ]; then
+              [ "$res" = "SUCCESS" ] && { echo "Pipeline OK"; exit 0; } || { echo "::error::Pipeline falló: $res"; exit 1; }
+            fi
+            [ "$life" = "INTERNAL_ERROR" ] && { echo "::error::INTERNAL_ERROR"; exit 1; }
+            sleep 30
+          done
+          echo "::warning::Timeout monitoreando; revisar en Databricks."
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf notebooks_to_deploy job.json
