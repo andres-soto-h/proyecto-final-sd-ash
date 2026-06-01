@@ -1,10 +1,14 @@
 # Workspace de Databricks — DEV (donde se desarrollan los notebooks).
+# managed_resource_group_name ÚNICO por workspace: si no se especifica, Azure deriva el nombre
+# del RG padre y dos workspaces en el mismo RG colisionan en el mismo managed RG, corrompiendo
+# la credencial interna de almacenamiento (error "Credential not found with key" al importar).
 resource "azurerm_databricks_workspace" "dev" {
-  name                = "dbw-${var.prefix}-dev"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  sku                 = "premium" # premium requerido para Unity Catalog
-  tags                = var.tags
+  name                        = "dbw-${var.prefix}-dev"
+  resource_group_name         = azurerm_resource_group.rg.name
+  location                    = azurerm_resource_group.rg.location
+  sku                         = "premium" # premium requerido para Unity Catalog
+  managed_resource_group_name = "databricks-rg-${var.prefix}-dev"
+  tags                        = var.tags
 }
 
 # Workspace de Databricks — PROD (destino del CI/CD).
@@ -12,11 +16,12 @@ resource "azurerm_databricks_workspace" "dev" {
 # suscripción chocan en el role assignment del service principal de Databricks
 # (error "ApplianceProvisioningFailed: The role assignment already exists").
 resource "azurerm_databricks_workspace" "prod" {
-  name                = "dbw-${var.prefix}-prod"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  sku                 = "premium"
-  tags                = var.tags
+  name                        = "dbw-${var.prefix}-prod"
+  resource_group_name         = azurerm_resource_group.rg.name
+  location                    = azurerm_resource_group.rg.location
+  sku                         = "premium"
+  managed_resource_group_name = "databricks-rg-${var.prefix}-prod"
+  tags                        = var.tags
 
   depends_on = [azurerm_databricks_workspace.dev]
 }
