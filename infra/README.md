@@ -22,14 +22,44 @@ cd infra
 cp terraform.tfvars.example terraform.tfvars   # completar valores
 terraform init
 terraform validate
-terraform plan
-terraform apply
 ```
 
-## Orden lógico de dependencias
-`RG → Storage/contenedores → Workspaces + Access Connector + RBAC → Metastore + assignment →
-Storage Credential → External Locations → Catálogos → Upload datasets`.
-Terraform resuelve el orden con los `depends_on` declarados.
+## Despliegue en dos etapas
+Se despliega en dos etapas para evitar el chicken-and-egg del `account_id` y porque Azure
+**auto-asigna un metastore por región** al crear el primer workspace (no hace falta crearlo).
+
+**Etapa 1 — infra Azure** (no requiere `account_id`):
+```bash
+terraform apply \
+  -target=azurerm_resource_group.rg \
+  -target=azurerm_storage_account.adls \
+  -target=azurerm_storage_container.containers \
+  -target=azurerm_databricks_workspace.dev \
+  -target=azurerm_databricks_workspace.prod \
+  -target=azurerm_databricks_access_connector.ac \
+  -target=azurerm_role_assignment.ac_blob_contributor
+```
+
+**Etapa 2 — objetos Unity Catalog** (workspace-level, auth vía `az login`):
+```bash
+terraform apply \
+  -target=databricks_storage_credential.mi \
+  -target=databricks_external_location.loc \
+  -target=databricks_catalog.dev \
+  -target=databricks_catalog.prod
+```
+
+**Datasets** (tras descargarlos en `../datasets/raw/`):
+```bash
+terraform apply   # aplica el resto, incluida la subida de CSV al contenedor raw
+```
+
+> Si tu región NO auto-asigna metastore, pon `create_metastore=true` y `databricks_account_id=<id>`
+> (de https://accounts.azuredatabricks.net) antes de la Etapa 2.
+
+## Notas
+- Los workspaces se crean **secuencialmente** (`prod` depende de `dev`) para evitar el error
+  `ApplianceProvisioningFailed: The role assignment already exists` al crearlos en paralelo.
 
 ## Notas
 - `shared_access_key_enabled = true` se deja para que TF cree contenedores; el **acceso a datos** desde
