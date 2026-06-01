@@ -31,8 +31,9 @@ silver = spark.table(f"{catalogo}.{esquema_source}.transactions")
 # COMMAND ----------
 
 features = silver.select(
-    "amt", "amt_log", "category", "gender", "edad", "hora",
-    "dia_semana", "dist_geo", "city_pop", "is_fraud"
+    "amt", "amt_log", "category", "gender", "edad", "hora", "dia_semana",
+    "es_noche", "es_fin_semana", "dist_geo", "city_pop",
+    "tiempo_desde_ultima_tx_seg", "n_tx_ultimas_24h", "amt_vs_avg_tarjeta", "is_fraud"
 ).na.drop(subset=["amt", "category", "gender", "edad", "dist_geo", "is_fraud"])
 
 tabla_feat = f"{catalogo}.{esquema_sink}.transactions_features"
