@@ -12,9 +12,11 @@ on:
 env:
   DEST_BASE: "/fraud_detection/proceso"
   CATALOGO: "catalog_prod"
-  STORAGE_NAME: "stfrauddetection01"
+  STORAGE_NAME: "stfraudasoto2026"
   WORKFLOW_NAME: "WF_PROD_FRAUD_DETECTION"
-  CLUSTER_NAME: "cluster-fraude-sd"
+  NODE_TYPE: "Standard_D4pds_v6"
+  SINGLE_USER: "andres_soto_h2026@outlook.com"
+  SPARK_VERSION: "15.4.x-scala2.12"
 
 jobs:
   deploy:
@@ -60,18 +62,6 @@ jobs:
               "$DEST_HOST/api/2.0/workspace/import"
           done
 
-      # 3) Obtener cluster existente en PROD.
-      - name: Get cluster ID
-        run: |
-          DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
-          DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
-          clusters=$(curl -s -H "Authorization: Bearer $DEST_TOKEN" "$DEST_HOST/api/2.0/clusters/list")
-          cid=$(echo "$clusters" | jq -r --arg n "$CLUSTER_NAME" '.clusters[]? | select(.cluster_name==$n) | .cluster_id')
-          if [ -z "$cid" ] || [ "$cid" = "null" ]; then
-            echo "::error::No se encontró el cluster $CLUSTER_NAME en prod"; exit 1
-          fi
-          echo "CLUSTER_ID=$cid" >> $GITHUB_ENV
-
       # 4) Borrar Job previo si existe.
       - name: Delete existing job
         run: |
@@ -85,7 +75,7 @@ jobs:
             echo "Job previo $jid eliminado."
           fi
 
-      # 5) Crear Job multi-task: prepamb -> ingest -> transform -> load -> train -> grants.
+      # 5) Crear Job multi-task con JOB CLUSTER efímero: prepamb -> ingest -> transform -> load -> train -> grants.
       - name: Create job
         run: |
           DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
@@ -95,14 +85,28 @@ jobs:
           {
             "name": "$WORKFLOW_NAME",
             "format": "MULTI_TASK",
+            "job_clusters": [
+              {
+                "job_cluster_key": "fraud_cluster",
+                "new_cluster": {
+                  "spark_version": "$SPARK_VERSION",
+                  "node_type_id": "$NODE_TYPE",
+                  "num_workers": 0,
+                  "data_security_mode": "SINGLE_USER",
+                  "single_user_name": "$SINGLE_USER",
+                  "spark_conf": {"spark.databricks.cluster.profile":"singleNode","spark.master":"local[*]"},
+                  "custom_tags": {"ResourceClass":"SingleNode","project":"fraud-detection"}
+                }
+              }
+            ],
             "tasks": [
-              {"task_key":"prepamb","notebook_task":{"notebook_path":"$DEST_BASE/0_preparacion_ambiente","source":"WORKSPACE","base_parameters":$PARAMS},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":3600,"max_retries":1},
-              {"task_key":"ingest_train","depends_on":[{"task_key":"prepamb"}],"notebook_task":{"notebook_path":"$DEST_BASE/1_ingest_train","source":"WORKSPACE","base_parameters":$PARAMS},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":3600,"max_retries":1},
-              {"task_key":"ingest_test","depends_on":[{"task_key":"prepamb"}],"notebook_task":{"notebook_path":"$DEST_BASE/1_ingest_test","source":"WORKSPACE","base_parameters":$PARAMS},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":3600,"max_retries":1},
-              {"task_key":"transform","depends_on":[{"task_key":"ingest_train"},{"task_key":"ingest_test"}],"notebook_task":{"notebook_path":"$DEST_BASE/2_transform","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO","esquema_source":"bronze","esquema_sink":"silver","storageName":"$STORAGE_NAME"}},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":3600,"max_retries":1},
-              {"task_key":"load","depends_on":[{"task_key":"transform"}],"notebook_task":{"notebook_path":"$DEST_BASE/3_load","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO","esquema_source":"silver","esquema_sink":"golden","storageName":"$STORAGE_NAME"}},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":3600,"max_retries":1},
-              {"task_key":"train","depends_on":[{"task_key":"load"}],"notebook_task":{"notebook_path":"$DEST_BASE/4_train_model","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO","esquema":"golden","model_schema":"ml"}},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":7200,"max_retries":1},
-              {"task_key":"grants","depends_on":[{"task_key":"train"}],"notebook_task":{"notebook_path":"$DEST_BASE/5_grants","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO"}},"existing_cluster_id":"${{ env.CLUSTER_ID }}","timeout_seconds":1800,"max_retries":1}
+              {"task_key":"prepamb","notebook_task":{"notebook_path":"$DEST_BASE/0_preparacion_ambiente","source":"WORKSPACE","base_parameters":$PARAMS},"job_cluster_key":"fraud_cluster","timeout_seconds":3600,"max_retries":1},
+              {"task_key":"ingest_train","depends_on":[{"task_key":"prepamb"}],"notebook_task":{"notebook_path":"$DEST_BASE/1_ingest_train","source":"WORKSPACE","base_parameters":$PARAMS},"job_cluster_key":"fraud_cluster","timeout_seconds":3600,"max_retries":1},
+              {"task_key":"ingest_test","depends_on":[{"task_key":"prepamb"}],"notebook_task":{"notebook_path":"$DEST_BASE/1_ingest_test","source":"WORKSPACE","base_parameters":$PARAMS},"job_cluster_key":"fraud_cluster","timeout_seconds":3600,"max_retries":1},
+              {"task_key":"transform","depends_on":[{"task_key":"ingest_train"},{"task_key":"ingest_test"}],"notebook_task":{"notebook_path":"$DEST_BASE/2_transform","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO","esquema_source":"bronze","esquema_sink":"silver","storageName":"$STORAGE_NAME"}},"job_cluster_key":"fraud_cluster","timeout_seconds":3600,"max_retries":1},
+              {"task_key":"load","depends_on":[{"task_key":"transform"}],"notebook_task":{"notebook_path":"$DEST_BASE/3_load","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO","esquema_source":"silver","esquema_sink":"golden","storageName":"$STORAGE_NAME"}},"job_cluster_key":"fraud_cluster","timeout_seconds":3600,"max_retries":1},
+              {"task_key":"train","depends_on":[{"task_key":"load"}],"notebook_task":{"notebook_path":"$DEST_BASE/4_train_model","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO","esquema":"golden","model_schema":"ml","max_evals":"15"}},"job_cluster_key":"fraud_cluster","timeout_seconds":7200,"max_retries":1},
+              {"task_key":"grants","depends_on":[{"task_key":"train"}],"notebook_task":{"notebook_path":"$DEST_BASE/5_grants","source":"WORKSPACE","base_parameters":{"catalogo":"$CATALOGO"}},"job_cluster_key":"fraud_cluster","timeout_seconds":1800,"max_retries":1}
             ],
             "max_concurrent_runs": 1,
             "tags": {"environment":"production","created_by":"github_actions","project":"fraud_detection"}
