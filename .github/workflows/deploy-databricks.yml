@@ -14,7 +14,7 @@ env:
   CATALOGO: "catalog_prod"
   STORAGE_NAME: "stfrauddetection01"
   WORKFLOW_NAME: "WF_PROD_FRAUD_DETECTION"
-  CLUSTER_NAME: "cluster_fraud"
+  CLUSTER_NAME: "cluster-fraude-sd"
 
 jobs:
   deploy:
