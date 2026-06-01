@@ -26,6 +26,13 @@ variable "databricks_account_id" {
   default     = ""
 }
 
+variable "databricks_aad_token" {
+  description = "Token AAD (Bearer) para autenticar el provider de Databricks a nivel de workspace. Inyectar vía TF_VAR_databricks_aad_token con `az account get-access-token`."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "create_metastore" {
   description = "Crear y asignar el metastore de UC. En Azure normalmente se auto-crea con el 1er workspace; dejar en false y subirlo a true solo si no existe."
   type        = bool

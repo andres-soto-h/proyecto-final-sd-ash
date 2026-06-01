@@ -13,16 +13,17 @@ provider "databricks" {
   # Autenticación: az CLI (az login) o variables DATABRICKS_* / ARM_*.
 }
 
-# Provider a NIVEL DE WORKSPACE DEV. Autenticación vía Azure CLI (az login).
+# Providers a NIVEL DE WORKSPACE. Se autentican con un token AAD (Bearer) inyectado por variable,
+# generado con `az account get-access-token --resource 2ff814a6-3304-4ab8-85cb-cd0e6f879c1d`.
+# Se evita la auth az-cli interna del provider (incompatible con versiones recientes de Azure CLI).
 provider "databricks" {
-  alias                       = "dev"
-  host                        = "https://${azurerm_databricks_workspace.dev.workspace_url}"
-  azure_workspace_resource_id = azurerm_databricks_workspace.dev.id
+  alias = "dev"
+  host  = "https://${azurerm_databricks_workspace.dev.workspace_url}"
+  token = var.databricks_aad_token
 }
 
-# Provider a NIVEL DE WORKSPACE PROD.
 provider "databricks" {
-  alias                       = "prod"
-  host                        = "https://${azurerm_databricks_workspace.prod.workspace_url}"
-  azure_workspace_resource_id = azurerm_databricks_workspace.prod.id
+  alias = "prod"
+  host  = "https://${azurerm_databricks_workspace.prod.workspace_url}"
+  token = var.databricks_aad_token
 }
