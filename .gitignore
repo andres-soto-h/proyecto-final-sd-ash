@@ -63,3 +63,7 @@ terraform.rc
 # planout
 # macOS
 .DS_Store
+
+# Streamlit secrets en cualquier ruta
+secrets.toml
+**/secrets.toml
