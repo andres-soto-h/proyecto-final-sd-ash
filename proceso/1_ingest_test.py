@@ -16,7 +16,8 @@ esquema     = dbutils.widgets.get("esquema")
 storageName = dbutils.widgets.get("storageName")
 
 raw_path    = f"abfss://{container}@{storageName}.dfs.core.windows.net/fraudTest.csv"
-bronze_path = f"abfss://bronze@{storageName}.dfs.core.windows.net/transactions_test"
+# Ruta namespaced por catálogo para que dev y prod no solapen ubicaciones de tablas externas.
+bronze_path = f"abfss://bronze@{storageName}.dfs.core.windows.net/{catalogo}/transactions_test"
 tabla       = f"{catalogo}.{esquema}.transactions_test"
 
 # COMMAND ----------

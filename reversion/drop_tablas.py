@@ -32,9 +32,9 @@ for esquema in ["golden", "silver", "bronze", "ml"]:
 
 # COMMAND ----------
 
-# Limpieza de rutas físicas (external locations bronze/silver/golden). raw NO se toca.
+# Limpieza de rutas físicas namespaced por catálogo (bronze/silver/golden). raw NO se toca.
 for capa in ["bronze", "silver", "golden"]:
-    path = f"abfss://{capa}@{storageName}.dfs.core.windows.net/"
+    path = f"abfss://{capa}@{storageName}.dfs.core.windows.net/{catalogo}/"
     try:
         dbutils.fs.rm(path, True); print(f"rm {path}")
     except Exception as e:

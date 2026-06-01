@@ -17,7 +17,7 @@ esquema_source = dbutils.widgets.get("esquema_source")
 esquema_sink   = dbutils.widgets.get("esquema_sink")
 storageName    = dbutils.widgets.get("storageName")
 
-silver_path = f"abfss://silver@{storageName}.dfs.core.windows.net/transactions"
+silver_path = f"abfss://silver@{storageName}.dfs.core.windows.net/{catalogo}/transactions"
 tabla_sink  = f"{catalogo}.{esquema_sink}.transactions"
 
 # COMMAND ----------

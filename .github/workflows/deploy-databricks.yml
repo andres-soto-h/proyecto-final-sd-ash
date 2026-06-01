@@ -28,6 +28,23 @@ jobs:
       - name: Install jq & curl
         run: sudo apt-get update && sudo apt-get install -y jq curl
 
+      # 0) Sincronizar el Git folder de DEV a la última versión de main (pull).
+      - name: Sync DEV git folder
+        run: |
+          ORIGIN_HOST=${{ secrets.DATABRICKS_ORIGIN_HOST }}
+          ORIGIN_TOKEN=${{ secrets.DATABRICKS_ORIGIN_TOKEN }}
+          REPO_PARENT=$(dirname "$(dirname "${{ secrets.DATABRICKS_ORIGIN_PATH }}")")
+          repos=$(curl -s -H "Authorization: Bearer $ORIGIN_TOKEN" \
+            "$ORIGIN_HOST/api/2.0/repos?path_prefix=$REPO_PARENT")
+          rid=$(echo "$repos" | jq -r '.repos[0].id // empty')
+          if [ -n "$rid" ]; then
+            echo "Sincronizando repo $rid a main ..."
+            curl -s -X PATCH -H "Authorization: Bearer $ORIGIN_TOKEN" -H "Content-Type: application/json" \
+              -d '{"branch":"main"}' "$ORIGIN_HOST/api/2.0/repos/$rid" | jq -r '.head_commit_id // .message'
+          else
+            echo "::warning::No se encontró Git folder en DEV; se exportará lo que haya."
+          fi
+
       # 1) Exportar notebooks del workspace DEV (formato SOURCE).
       - name: Export notebooks from DEV
         run: |

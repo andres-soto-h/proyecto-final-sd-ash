@@ -16,7 +16,7 @@ esquema_source = dbutils.widgets.get("esquema_source")
 esquema_sink   = dbutils.widgets.get("esquema_sink")
 storageName    = dbutils.widgets.get("storageName")
 
-base = f"abfss://golden@{storageName}.dfs.core.windows.net"
+base = f"abfss://golden@{storageName}.dfs.core.windows.net/{catalogo}"
 
 # COMMAND ----------
 
