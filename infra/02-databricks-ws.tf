@@ -8,12 +8,17 @@ resource "azurerm_databricks_workspace" "dev" {
 }
 
 # Workspace de Databricks — PROD (destino del CI/CD).
+# depends_on fuerza creación secuencial: dos workspaces creándose en paralelo en la misma
+# suscripción chocan en el role assignment del service principal de Databricks
+# (error "ApplianceProvisioningFailed: The role assignment already exists").
 resource "azurerm_databricks_workspace" "prod" {
   name                = "dbw-${var.prefix}-prod"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   sku                 = "premium"
   tags                = var.tags
+
+  depends_on = [azurerm_databricks_workspace.dev]
 }
 
 # Access Connector for Azure Databricks = Managed Identity para acceder a ADLS.
