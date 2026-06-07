@@ -33,11 +33,11 @@ Toda la infraestructura se aprovisiona con **Terraform** y el despliegue dev→p
 | `infra/` | Terraform: Azure + Unity Catalog + serving |
 | `datasets/` | Enlaces a insumos + muestra (`sample_fraud.csv`); CSV reales van al contenedor raw |
 | `prepAmb/` | Preparación de ambiente (schemas) |
-| `proceso/` | Notebooks ETL PySpark + entrenamiento + grants |
-| `seguridad/` | `grants.sql` (usuarios/grupos) |
+| `proceso/` | Notebooks ETL PySpark + entrenamiento + creación de grupos y grants |
+| `seguridad/` | `grants.sql` (espejo de los grants; los grupos los crea `5_grants.py` vía SDK) |
 | `reversion/` | DROP de tablas/schemas y limpieza de rutas |
 | `streamlit_app/` | Web app de exposición |
-| `dashboard/` | Capturas/exports de tablas finales |
+| `dashboard/` | Consultas SQL sobre `golden` + guía del tablero (`dashboard_queries.sql`) |
 | `certificaciones/` | Certificaciones (png + enlaces) |
 | `evidencias/` | Capturas de WF, Actions y recursos Azure |
 | `.github/workflows/` | CI/CD dev→prod + Terraform CI |
@@ -63,7 +63,9 @@ bash datasets/download_datasets.sh   # descarga Sparkov a datasets/raw/ (requier
 ```
 
 ### 3. Desarrollo en DEV
-Importar `prepAmb/` y `proceso/` al workspace dev y ejecutar el medallion (prepamb → ingest → transform → load → train).
+Importar `prepAmb/` y `proceso/` al workspace dev y ejecutar el pipeline completo:
+`prepamb → ingest → transform → load → train → grants` (la última tarea crea los grupos `analistas_fraude`
+e `ingenieros_datos` y aplica los permisos de Unity Catalog).
 
 ### 4. CI/CD dev → prod
 Configurar **secrets** en GitHub (Settings → Secrets and variables → Actions):
@@ -93,6 +95,15 @@ streamlit run app.py
   los notebooks `prepAmb` solo crean schemas.
 - **Managed Identity** (Access Connector + Storage Credential) es la única vía de acceso a datos: sin keys ni SAS.
 - **scale_to_zero** en el endpoint para controlar costos.
+
+## Resultados
+- **Modelo** `fraud_xgb` (XGBoost + Hyperopt, registrado en Unity Catalog con alias `champion`):
+  **AUC-PR ≈ 0.95**, precision ≈ 0.68 sobre el conjunto de test. Features de mayor peso: `es_noche`,
+  `amt_vs_avg_tarjeta`, `n_tx_ultimas_24h`.
+- **Tablero** sobre la capa `golden` (`dashboard/`): tasa de fraude por categoría, hora, franja
+  día/noche, fin de semana y rango de monto.
+- **Endpoint** `fraud-xgb-endpoint` (scale_to_zero) sirviendo el champion, consumido por la app Streamlit.
+- Evidencias del flujo end-to-end (infra, UC, ETL, ML, serving, grants, CI/CD, app) en `evidencias/`.
 
 ## Reversión / limpieza
 - Tablas/schemas/rutas: notebook `reversion/drop_tablas.py`.
