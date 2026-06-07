@@ -70,3 +70,6 @@ secrets.toml
 
 # Specs internas (metodología SDD): fuera del versionamiento
 specs/
+
+# Enunciado del trabajo (documento fuente): fuera del versionamiento
+*.docx.md
