@@ -67,3 +67,6 @@ terraform.rc
 # Streamlit secrets en cualquier ruta
 secrets.toml
 **/secrets.toml
+
+# Specs internas (metodología SDD): fuera del versionamiento
+specs/

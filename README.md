@@ -29,7 +29,6 @@ Toda la infraestructura se aprovisiona con **Terraform** y el despliegue dev→p
 
 | Carpeta | Contenido |
 |---------|-----------|
-| `specs/` | Specs SDD por área (overview, infra, seguridad, etl, ml, cicd, streamlit) |
 | `infra/` | Terraform: Azure + Unity Catalog + serving |
 | `datasets/` | Enlaces a insumos + muestra (`sample_fraud.csv`); CSV reales van al contenedor raw |
 | `prepAmb/` | Preparación de ambiente (schemas) |
@@ -109,7 +108,3 @@ streamlit run app.py
 - Tablas/schemas/rutas: notebook `reversion/drop_tablas.py`.
 - Infraestructura completa: `terraform destroy` en `infra/`.
 
-## Premisas
-- Commits sin co-autoría automática.
-- Repositorio **público** al entregar.
-- Los CSV crudos no se commitean (van al contenedor raw del ADLS).
