@@ -1,3 +1,3 @@
 # certificaciones
 
-Colocar aquí los archivos correspondientes (capturas/exports/enlaces).
+https://credentials.databricks.com/profile/andrssoto388478/wallet
