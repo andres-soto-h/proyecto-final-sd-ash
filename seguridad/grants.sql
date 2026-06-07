@@ -1,6 +1,6 @@
 -- Grants de Unity Catalog para el proyecto de detección de fraude.
 -- Parametrizado por ${catalogo} (catalog_dev / catalog_prod).
--- Grupos esperados (crear en la consola de cuenta de Databricks):
+-- Los grupos los crea (idempotente) el notebook `proceso/5_grants.py` vía SDK antes de estos grants:
 --   - analistas_fraude : consumo de la capa golden.
 --   - ingenieros_datos : control total del catálogo.
 

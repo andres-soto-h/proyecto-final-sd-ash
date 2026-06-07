@@ -13,7 +13,9 @@ Definir el modelo de acceso: RBAC en Azure para que la capa raw se lea **solo co
 3. Grupos/usuarios de Databricks con permisos diferenciados:
    - Grupo `analistas_fraude`: `USE CATALOG`, `USE SCHEMA`, `SELECT` sobre `golden`.
    - Grupo `ingenieros_datos`: `ALL PRIVILEGES` sobre el catálogo del entorno.
-4. Grants idempotentes y versionados (`seguridad/grants.sql`), ejecutables como tarea final del pipeline.
+4. Los grupos se **crean desde el notebook** `proceso/5_grants.py` con el SDK (`WorkspaceClient`), de forma
+   idempotente — sin tocar Terraform ni `account_id`, reutilizando la auth del job.
+5. Grants idempotentes y versionados (`seguridad/grants.sql`), ejecutables como tarea final del pipeline.
 
 ## Diseño
 
@@ -37,7 +39,7 @@ GRANT ALL PRIVILEGES ON CATALOG ${catalogo} TO `ingenieros_datos`;
 
 1. Confirmar el `role_assignment` en `infra/02-databricks-ws.tf`.
 2. Escribir `seguridad/grants.sql` parametrizado.
-3. Crear notebook `proceso/5_grants.ipynb` que ejecute los grants leyendo el widget `catalogo`.
+3. Notebook `proceso/5_grants.py`: crea los grupos (SDK, idempotente) y ejecuta los grants leyendo el widget `catalogo`.
 4. Documentar grupos/usuarios y capturar evidencia (`evidencias/`).
 
 ## Criterios de aceptación
